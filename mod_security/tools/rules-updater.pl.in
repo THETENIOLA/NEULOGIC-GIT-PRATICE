@@ -11,6 +11,8 @@ use URI ();
 use HTTP::Date ();
 use Cwd qw(getcwd);
 use Getopt::Std;
+use File::Find qw(find);
+use File::Spec;
 
 my $VERSION = "0.0.1";
 my($SCRIPT) = ($0 =~ m/([^\/\\]+)$/);
@@ -48,7 +50,7 @@ else {
 
 my @fetched = ();
 my %opt = ();
-getopts('c:r:p:s:v:t:e:f:EuS:D:R:U:F:L:ldh', \%opt);
+getopts('c:r:p:s:v:t:e:f:E:uS:D:R:U:F:L:ldh', \%opt);
 
 usage(1) if(defined $opt{h});
 usage(1) if(@ARGV > 1);
@@ -126,6 +128,7 @@ ${msg}Usage: $SCRIPT [-c config_file] [[options] [action]
   -v text  Version         Full/partial version (EX: 1, 1.5, 1.5.2, 1.5.2-dev3)
   -t secs  Timeout         Timeout for fetching data in seconds (default 600).
   -e addr  NotifyEmail     Notify via email on update (comma separated list).
+  -E       EmailDiff       Include unpacked ruleset details in notification email.
   -f addr  NotifyEmailFrom From address for notification email.
   -u       Unpack          Unpack into LocalRules/version path.
   -d       Debug           Print out lots of debugging.
@@ -318,7 +321,16 @@ sub ruleset_unpack {
 		die "Refused to overwrite previously unpacked \"$opt{s}/$repo/$version\".\n";
 	}
 
-	# TODO: Verify sig
+	if ($HAVE_GNUPG) {
+		my $sigfn = "$fn.sig";
+		if (-e $sigfn) {
+			print STDERR "Verifying signature before unpacking \"$fn\" ...\n" if ($opt{d});
+			ruleset_verifysig($fn, $sigfn);
+		}
+		else {
+			warn "No signature file found for \"$fn\"; skipping signature verification.\n";
+		}
+	}
 
 	my $pwd = getcwd();
 	my $unpackdir = "$opt{s}/$repo/$version";
@@ -411,7 +423,10 @@ $version_text
 ModSecurity - http://www.modsecurity.org/
 EOT
 
-	# TODO: Diffs
+	if ($opt{E}) {
+		$body .= "\n\nUpdated ruleset details:\n";
+		$body .= ruleset_unpacked_summary(@_);
+	}
 
 	open(SM, "|-", @$SENDMAIL) or die "Failed to send mail: $!\n";
 	print STDERR "Sending notification email to: $opt{e}\n";
@@ -443,13 +458,33 @@ sub ruleset_verifysig {
 	return;
 }
 
-sub sig2str {
-	my %sig = %{ $_[0] || {} };
-	"Signature made ".localtime($sig{timestamp})." by $sig{user} (ID: $sig{keyid}) and is $GPG_TRUST{$sig{trust}} trusted.";
-}
+sub ruleset_unpacked_summary {
+    my @lines = ();
 
-################################################################################
-################################################################################
+    for my $entry (@_) {
+        my ($repo, $version, $ruleset, $unpackdir) = @{$entry};
+        push @lines, "$repo $version:";
+
+        if (defined $unpackdir && -d $unpackdir) {
+            push @lines, "  unpacked to $unpackdir";
+            my @files = ();
+            find(sub {
+                return if -d;
+                push @files, File::Spec->abs2rel($File::Find::name, $unpackdir);
+            }, $unpackdir);
+            @files = sort @files;
+            push @lines, map { "    $_" } @files;
+            push @lines, "  (" . scalar(@files) . " files)";
+        }
+        else {
+            push @lines, "  unpack info unavailable; saved ruleset file: $opt{p}/$ruleset";
+        }
+
+        push @lines, "";
+    }
+
+    return join("\n", @lines);
+}
 
 # List what is there
 if ($opt{l}) { repository_dump(); exit 0 }
@@ -474,7 +509,7 @@ if ($opt{u}) {
 	}
 }
 
-# Unpack
+# Notify email
 if ($opt{e}) {
 	notify_email(@fetched);
 }

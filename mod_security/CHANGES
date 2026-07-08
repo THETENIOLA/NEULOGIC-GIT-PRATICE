@@ -1,3 +1,10 @@
+08 Jul 2026 - local patch
+-------------------------
+
+ * feat: add rules-updater signature verification before unpack
+ * feat: add optional email diff output for rules-updater notifications
+ * docs: document NotifyEmailDiff in rules-updater example config
+
 01 Jul 2025 - 2.9.11
 --------------------
 
