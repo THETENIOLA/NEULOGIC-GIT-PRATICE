@@ -4,3 +4,5 @@ create table school (
     address VARCHAR(255),
     established_year INT
 );
+
+---- test by teniola
