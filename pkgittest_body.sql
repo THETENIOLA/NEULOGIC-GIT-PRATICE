@@ -29,6 +29,7 @@ CREATE OR REPLACE PACKAGE BODY pkgittest AS
   -- 
   FUNCTION fn_get_curr_dtt RETURN VARCHAR2 IS
      BEGIN
+		 logger.log ('I got here');
        RETURN TO_CHAR(SYSDATE, 'YYYY-MM-DD HH24:MI:SS');
 	END;
 
